@@ -65,15 +65,44 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
             raise UpdateFailed(str(err)) from err
 
         changed = False
+        refresh_flow_for: list[str] = []
         for device_id, tank in tanks.items():
             if not tank.is_propane:
                 continue
             consumption = self.consumption.setdefault(
                 device_id, MyTankAppConsumption()
             )
+            if (
+                consumption.flow_rate_per_hour is None
+                or (
+                    tank.last_reported is not None
+                    and (
+                        consumption.flow_calculated_at is None
+                        or tank.last_reported > consumption.flow_calculated_at
+                    )
+                )
+            ):
+                refresh_flow_for.append(device_id)
             changed |= consumption.update(
                 tank, uses_liters=self.account.uses_liters
             )
+
+        for device_id in refresh_flow_for:
+            try:
+                readings = await self.client.async_get_recent_readings(device_id)
+            except MyTankAppAuthError as err:
+                raise ConfigEntryAuthFailed from err
+            except MyTankAppError as err:
+                _LOGGER.warning(
+                    "Unable to update flow rate for tank ending in %s: %s",
+                    device_id[-4:],
+                    err,
+                )
+                continue
+            changed |= self.consumption[device_id].update_flow_rate(
+                readings, tank_size=tanks[device_id].tank_size
+            )
+
         if changed:
             await self._store.async_save(
                 {

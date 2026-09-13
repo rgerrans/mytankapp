@@ -19,6 +19,7 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
     UnitOfVolume,
+    UnitOfVolumeFlowRate,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -142,6 +143,14 @@ CONSUMPTION_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=2,
 )
 
+FLOW_RATE_DESCRIPTION = SensorEntityDescription(
+    key="propane_flow_rate",
+    translation_key="propane_flow_rate",
+    device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=2,
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -164,6 +173,11 @@ async def async_setup_entry(
         ]
         entities.extend(
             MyTankAppEnergyConsumedSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
+        )
+        entities.extend(
+            MyTankAppPropaneFlowRateSensor(entry, device_id)
             for device_id in new_device_ids
             if coordinator.data[device_id].is_propane
         )
@@ -235,3 +249,30 @@ class MyTankAppEnergyConsumedSensor(MyTankAppEntity, SensorEntity):
         if consumption is None:
             return None
         return round(consumption.total_kwh, 3)
+
+
+class MyTankAppPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
+    """Propane flow rate calculated from consecutive history readings."""
+
+    entity_description = FLOW_RATE_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+        self._account = entry.runtime_data.account
+
+    @property
+    def native_value(self) -> float | None:
+        """Return average volume used per hour in the latest report interval."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None or consumption.flow_rate_per_hour is None:
+            return None
+        return round(consumption.flow_rate_per_hour, 3)
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the account-aware volume flow-rate unit."""
+        return (
+            UnitOfVolumeFlowRate.LITERS_PER_HOUR
+            if self._account.uses_liters
+            else UnitOfVolumeFlowRate.GALLONS_PER_HOUR
+        )

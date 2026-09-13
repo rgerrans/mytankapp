@@ -126,6 +126,40 @@ class MyTankAppTank:
         fuel_type = (self.fuel_type or "").casefold()
         return "propane" in fuel_type or fuel_type in {"lp", "lpg", "lp gas"}
 
+    @property
+    def average_volume_usage_per_day(self) -> float | None:
+        """Convert the API's percent-per-day usage to account volume per day."""
+        if (
+            self.average_daily_usage is None
+            or self.average_daily_usage < 0
+            or self.tank_size is None
+            or self.tank_size <= 0
+        ):
+            return None
+        return self.tank_size * self.average_daily_usage / 100
+
+
+@dataclass(frozen=True)
+class MyTankAppReading:
+    """One timestamped tank history reading."""
+
+    reported_at: datetime
+    units: float
+    percent: float | None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> MyTankAppReading | None:
+        """Create a reading from a transaction response object."""
+        reported_at = _datetime(data.get("TransDate"))
+        units = _float(data.get("Units"))
+        if reported_at is None or units is None:
+            return None
+        return cls(
+            reported_at=reported_at,
+            units=units,
+            percent=_float(data.get("Percent")),
+        )
+
 
 PROPANE_KWH_PER_GALLON = 91_452 / 3_412
 LITERS_PER_GALLON = 3.785411784
@@ -138,6 +172,8 @@ class MyTankAppConsumption:
     total_kwh: float = 0.0
     last_inventory: float | None = None
     last_reported: datetime | None = None
+    flow_rate_per_hour: float | None = None
+    flow_calculated_at: datetime | None = None
 
     def update(self, tank: MyTankAppTank, *, uses_liters: bool) -> bool:
         """Apply a new tank reading and return whether stored data changed."""
@@ -146,7 +182,8 @@ class MyTankAppConsumption:
             return False
         if (
             tank.last_reported is not None
-            and tank.last_reported == self.last_reported
+            and self.last_reported is not None
+            and tank.last_reported <= self.last_reported
         ):
             return False
 
@@ -172,6 +209,36 @@ class MyTankAppConsumption:
         self.last_reported = tank.last_reported
         return True
 
+    def update_flow_rate(
+        self,
+        readings: list[MyTankAppReading],
+        *,
+        tank_size: float | None,
+    ) -> bool:
+        """Calculate average volume/hour from the latest two history readings."""
+        if len(readings) < 2:
+            return False
+        newest, previous = readings[0], readings[1]
+        if newest.reported_at <= previous.reported_at:
+            return False
+        if newest.reported_at == self.flow_calculated_at:
+            return False
+
+        elapsed_hours = (newest.reported_at - previous.reported_at).total_seconds() / 3600
+        consumed = previous.units - newest.units
+        refill_threshold = max(2.0, (tank_size or 0) * 0.02)
+
+        if consumed > 0:
+            self.flow_rate_per_hour = consumed / elapsed_hours
+        elif -consumed >= refill_threshold:
+            self.flow_rate_per_hour = 0.0
+        else:
+            # Unchanged or slightly higher readings are treated as zero flow,
+            # not negative consumption.
+            self.flow_rate_per_hour = 0.0
+        self.flow_calculated_at = newest.reported_at
+        return True
+
     def as_dict(self) -> dict[str, Any]:
         """Serialize state for Home Assistant storage."""
         return {
@@ -179,6 +246,12 @@ class MyTankAppConsumption:
             "last_inventory": self.last_inventory,
             "last_reported": (
                 self.last_reported.isoformat() if self.last_reported else None
+            ),
+            "flow_rate_per_hour": self.flow_rate_per_hour,
+            "flow_calculated_at": (
+                self.flow_calculated_at.isoformat()
+                if self.flow_calculated_at
+                else None
             ),
         }
 
@@ -189,4 +262,6 @@ class MyTankAppConsumption:
             total_kwh=_float(data.get("total_kwh")) or 0.0,
             last_inventory=_float(data.get("last_inventory")),
             last_reported=_datetime(data.get("last_reported")),
+            flow_rate_per_hour=_float(data.get("flow_rate_per_hour")),
+            flow_calculated_at=_datetime(data.get("flow_calculated_at")),
         )

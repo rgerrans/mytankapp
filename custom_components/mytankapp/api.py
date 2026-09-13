@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
 from .const import BASE_URL
-from .models import MyTankAppAccount, MyTankAppTank
+from .models import MyTankAppAccount, MyTankAppReading, MyTankAppTank
 
 
 class MyTankAppError(Exception):
@@ -96,17 +96,45 @@ class MyTankAppClient:
                 tanks[tank.device_id] = tank
         return tanks
 
+    async def async_get_recent_readings(
+        self, device_id: str, *, days: int = 60
+    ) -> list[MyTankAppReading]:
+        """Fetch recent timestamped readings for one tank."""
+        payload = await self._request_json(
+            "GET",
+            "/api/transaction/uniquelist",
+            params={"DeviceID": device_id, "Days": days},
+        )
+        if not isinstance(payload, list):
+            raise MyTankAppResponseError("Transaction list was not an array")
+        readings = [
+            reading
+            for raw in payload
+            if isinstance(raw, dict)
+            and (reading := MyTankAppReading.from_api(raw)) is not None
+        ]
+        return sorted(readings, key=lambda reading: reading.reported_at, reverse=True)
+
     async def _request_json(
-        self, method: str, path: str, *, retry_auth: bool = True
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        retry_auth: bool = True,
     ) -> Any:
         if self._authorization is None:
             await self.async_login()
-        response = await self._request(method, path, authenticated=True)
+        response = await self._request(
+            method, path, params=params, authenticated=True
+        )
         if response.status in (401, 403) and retry_auth:
             self._authorization = None
             response.release()
             await self.async_login()
-            return await self._request_json(method, path, retry_auth=False)
+            return await self._request_json(
+                method, path, params=params, retry_auth=False
+            )
         if response.status in (401, 403):
             response.release()
             raise MyTankAppAuthError("Authorization was rejected")
@@ -118,6 +146,7 @@ class MyTankAppClient:
         path: str,
         *,
         json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
         authenticated: bool,
     ) -> ClientResponse:
         headers: dict[str, str] = {"Accept": "application/json"}
@@ -129,6 +158,7 @@ class MyTankAppClient:
                 f"{self._base_url}{path}",
                 headers=headers,
                 json=json_body,
+                params=params,
                 timeout=ClientTimeout(total=30),
             )
         except (ClientError, TimeoutError) as err:
