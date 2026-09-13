@@ -1,0 +1,204 @@
+"""Sensor entities for MyTankApp."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+    UnitOfVolume,
+)
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from . import MyTankAppConfigEntry
+from .entity import MyTankAppEntity
+from .models import MyTankAppAccount, MyTankAppTank
+
+
+@dataclass(frozen=True, kw_only=True)
+class MyTankAppSensorDescription(SensorEntityDescription):
+    """Describe a MyTankApp sensor."""
+
+    value_fn: Callable[[MyTankAppTank, MyTankAppAccount], Any]
+
+
+SENSORS: tuple[MyTankAppSensorDescription, ...] = (
+    MyTankAppSensorDescription(
+        key="level",
+        translation_key="level",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda tank, account: tank.level,
+    ),
+    MyTankAppSensorDescription(
+        key="inventory",
+        translation_key="inventory",
+        device_class=SensorDeviceClass.VOLUME,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda tank, account: tank.inventory,
+    ),
+    MyTankAppSensorDescription(
+        key="ullage",
+        translation_key="ullage",
+        device_class=SensorDeviceClass.VOLUME,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda tank, account: tank.ullage,
+    ),
+    MyTankAppSensorDescription(
+        key="capacity",
+        translation_key="capacity",
+        device_class=SensorDeviceClass.VOLUME,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+        value_fn=lambda tank, account: tank.tank_size,
+    ),
+    MyTankAppSensorDescription(
+        key="average_daily_usage",
+        translation_key="average_daily_usage",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda tank, account: (
+            None
+            if tank.average_daily_usage is None
+            else tank.average_daily_usage * (tank.tank_size or 0) / 100
+            if account.average_usage_is_volume
+            else tank.average_daily_usage
+        ),
+    ),
+    MyTankAppSensorDescription(
+        key="last_reported",
+        translation_key="last_reported",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.last_reported,
+    ),
+    MyTankAppSensorDescription(
+        key="temperature",
+        translation_key="temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.temperature,
+    ),
+    MyTankAppSensorDescription(
+        key="base_temperature",
+        translation_key="base_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.base_temperature,
+    ),
+    MyTankAppSensorDescription(
+        key="days_to_30",
+        translation_key="days_to_30",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.days_until(30),
+    ),
+    MyTankAppSensorDescription(
+        key="days_to_15",
+        translation_key="days_to_15",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.days_until(15),
+    ),
+    MyTankAppSensorDescription(
+        key="days_to_empty",
+        translation_key="days_to_empty",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda tank, account: tank.days_until(0),
+    ),
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: MyTankAppConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Add sensors for every tank returned during initial setup."""
+    coordinator = entry.runtime_data.coordinator
+    known_device_ids: set[str] = set()
+
+    @callback
+    def add_new_entities() -> None:
+        new_device_ids = coordinator.data.keys() - known_device_ids
+        if not new_device_ids:
+            return
+        async_add_entities(
+            MyTankAppSensor(entry, device_id, description)
+            for device_id in new_device_ids
+            for description in SENSORS
+        )
+        known_device_ids.update(new_device_ids)
+
+    add_new_entities()
+    entry.async_on_unload(coordinator.async_add_listener(add_new_entities))
+
+
+class MyTankAppSensor(MyTankAppEntity, SensorEntity):
+    """A sensor backed by the shared tank coordinator."""
+
+    entity_description: MyTankAppSensorDescription
+
+    def __init__(
+        self,
+        entry: MyTankAppConfigEntry,
+        device_id: str,
+        description: MyTankAppSensorDescription,
+    ) -> None:
+        super().__init__(entry, device_id, description.key)
+        self.entity_description = description
+        self._account = entry.runtime_data.account
+
+    @property
+    def native_value(self) -> Any:
+        """Return the sensor value."""
+        tank = self.tank
+        if tank is None:
+            return None
+        if (
+            self.entity_description.key == "average_daily_usage"
+            and self._account.average_usage_is_volume
+            and tank.tank_size is None
+        ):
+            return None
+        return self.entity_description.value_fn(tank, self._account)
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the account-aware native unit."""
+        if self.entity_description.key in {"inventory", "ullage", "capacity"}:
+            return (
+                UnitOfVolume.LITERS
+                if self._account.uses_liters
+                else UnitOfVolume.GALLONS
+            )
+        if self.entity_description.key == "average_daily_usage":
+            if not self._account.average_usage_is_volume:
+                return f"{PERCENTAGE}/d"
+            volume = "L" if self._account.uses_liters else "gal"
+            return f"{volume}/d"
+        return self.entity_description.native_unit_of_measurement

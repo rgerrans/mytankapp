@@ -1,0 +1,11 @@
+{
+  "domain": "mytankapp",
+  "name": "MyTankApp",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://www.mytankapp.com",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

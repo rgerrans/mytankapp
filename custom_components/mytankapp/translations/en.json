@@ -1,0 +1,60 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to MyTankApp",
+        "description": "Enter the credentials you use at mytankapp.com. The integration is read-only.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect MyTankApp",
+        "description": "Enter the current password for {username}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to MyTankApp",
+      "invalid_auth": "Invalid username or password",
+      "unknown": "Unexpected response from MyTankApp"
+    },
+    "abort": {
+      "already_configured": "This MyTankApp account is already configured",
+      "reauth_successful": "MyTankApp was reconnected successfully"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MyTankApp options",
+        "description": "Use conservative polling because MyTankApp does not publish API limits.",
+        "data": {
+          "scan_interval": "Polling interval (minutes)",
+          "low_level": "Low-level threshold (%)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "level": { "name": "Level" },
+      "inventory": { "name": "Inventory" },
+      "ullage": { "name": "Ullage" },
+      "capacity": { "name": "Capacity" },
+      "average_daily_usage": { "name": "Average daily usage" },
+      "last_reported": { "name": "Last reported" },
+      "temperature": { "name": "Temperature" },
+      "base_temperature": { "name": "Base temperature" },
+      "days_to_30": { "name": "Days to 30%" },
+      "days_to_15": { "name": "Days to 15%" },
+      "days_to_empty": { "name": "Days to empty" }
+    },
+    "binary_sensor": {
+      "low_level": { "name": "Low level" }
+    }
+  }
+}
