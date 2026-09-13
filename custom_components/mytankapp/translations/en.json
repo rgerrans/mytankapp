@@ -51,7 +51,8 @@
       "base_temperature": { "name": "Base temperature" },
       "days_to_30": { "name": "Days to 30%" },
       "days_to_15": { "name": "Days to 15%" },
-      "days_to_empty": { "name": "Days to empty" }
+      "days_to_empty": { "name": "Days to empty" },
+      "propane_energy_consumed": { "name": "Propane energy consumed" }
     },
     "binary_sensor": {
       "low_level": { "name": "Low level" }

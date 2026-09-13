@@ -119,3 +119,74 @@ class MyTankAppTank:
     def display_name(self) -> str:
         """Return the best non-empty name for the tank."""
         return self.description or self.name or f"Tank {self.device_id[-4:]}"
+
+    @property
+    def is_propane(self) -> bool:
+        """Return whether the tank contains propane/LPG."""
+        fuel_type = (self.fuel_type or "").casefold()
+        return "propane" in fuel_type or fuel_type in {"lp", "lpg", "lp gas"}
+
+
+PROPANE_KWH_PER_GALLON = 91_452 / 3_412
+LITERS_PER_GALLON = 3.785411784
+
+
+@dataclass
+class MyTankAppConsumption:
+    """Persisted cumulative propane consumption for one tank."""
+
+    total_kwh: float = 0.0
+    last_inventory: float | None = None
+    last_reported: datetime | None = None
+
+    def update(self, tank: MyTankAppTank, *, uses_liters: bool) -> bool:
+        """Apply a new tank reading and return whether stored data changed."""
+        current = tank.inventory
+        if current is None:
+            return False
+        if (
+            tank.last_reported is not None
+            and tank.last_reported == self.last_reported
+        ):
+            return False
+
+        if self.last_inventory is None:
+            self.last_inventory = current
+            self.last_reported = tank.last_reported
+            return True
+
+        previous = self.last_inventory
+        refill_threshold = max(2.0, (tank.tank_size or 0) * 0.02)
+        increase = current - previous
+
+        if increase >= refill_threshold:
+            # A delivery starts a new consumption baseline; it is not usage.
+            self.last_inventory = current
+        elif current < previous:
+            consumed = previous - current
+            gallons = consumed / LITERS_PER_GALLON if uses_liters else consumed
+            self.total_kwh += gallons * PROPANE_KWH_PER_GALLON
+            self.last_inventory = current
+        # Ignore small increases as gauge/temperature noise. Keeping the lower
+        # baseline prevents that noise from being counted again on the next dip.
+        self.last_reported = tank.last_reported
+        return True
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialize state for Home Assistant storage."""
+        return {
+            "total_kwh": self.total_kwh,
+            "last_inventory": self.last_inventory,
+            "last_reported": (
+                self.last_reported.isoformat() if self.last_reported else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> MyTankAppConsumption:
+        """Restore state from Home Assistant storage."""
+        return cls(
+            total_kwh=_float(data.get("total_kwh")) or 0.0,
+            last_inventory=_float(data.get("last_inventory")),
+            last_reported=_datetime(data.get("last_reported")),
+        )

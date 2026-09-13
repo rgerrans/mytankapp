@@ -43,7 +43,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyTankAppConfigEntry) ->
         raise ConfigEntryAuthFailed from err
     except MyTankAppError as err:
         raise ConfigEntryNotReady(str(err)) from err
-    coordinator = MyTankAppCoordinator(hass, entry, client)
+    coordinator = MyTankAppCoordinator(hass, entry, client, account)
+    await coordinator.async_load_consumption()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = MyTankAppRuntimeData(client, account, coordinator)
 

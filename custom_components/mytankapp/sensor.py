@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfEnergy,
     UnitOfTemperature,
     UnitOfTime,
     UnitOfVolume,
@@ -132,6 +133,15 @@ SENSORS: tuple[MyTankAppSensorDescription, ...] = (
     ),
 )
 
+CONSUMPTION_DESCRIPTION = SensorEntityDescription(
+    key="propane_energy_consumed",
+    translation_key="propane_energy_consumed",
+    device_class=SensorDeviceClass.ENERGY,
+    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    suggested_display_precision=2,
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -147,11 +157,17 @@ async def async_setup_entry(
         new_device_ids = coordinator.data.keys() - known_device_ids
         if not new_device_ids:
             return
-        async_add_entities(
+        entities: list[SensorEntity] = [
             MyTankAppSensor(entry, device_id, description)
             for device_id in new_device_ids
             for description in SENSORS
+        ]
+        entities.extend(
+            MyTankAppEnergyConsumedSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
         )
+        async_add_entities(entities)
         known_device_ids.update(new_device_ids)
 
     add_new_entities()
@@ -202,3 +218,20 @@ class MyTankAppSensor(MyTankAppEntity, SensorEntity):
             volume = "L" if self._account.uses_liters else "gal"
             return f"{volume}/d"
         return self.entity_description.native_unit_of_measurement
+
+
+class MyTankAppEnergyConsumedSensor(MyTankAppEntity, SensorEntity):
+    """Cumulative propane energy consumed since this sensor was created."""
+
+    entity_description = CONSUMPTION_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return cumulative consumed propane energy in kWh."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None:
+            return None
+        return round(consumption.total_kwh, 3)

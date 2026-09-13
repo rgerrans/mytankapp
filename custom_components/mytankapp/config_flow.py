@@ -87,7 +87,7 @@ class MyTankAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except MyTankAppError:
                 errors["base"] = "unknown"
             else:
-                return self.async_update_reload_and_abort(
+                return self.async_update_and_abort(
                     entry,
                     data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]},
                 )
