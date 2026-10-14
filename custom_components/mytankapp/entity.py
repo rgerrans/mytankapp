@@ -33,7 +33,7 @@ class MyTankAppEntity(CoordinatorEntity[MyTankAppCoordinator]):
 
     @property
     def level_offset(self) -> float:
-        """Return configured percentage points to subtract from reported level."""
+        """Return configured relative percent by which the monitor reads high."""
         return float(
             self.coordinator.config_entry.options.get(
                 CONF_LEVEL_OFFSET, DEFAULT_LEVEL_OFFSET
@@ -44,15 +44,21 @@ class MyTankAppEntity(CoordinatorEntity[MyTankAppCoordinator]):
         """Return the corrected tank level percentage."""
         if tank.level is None:
             return None
-        return min(100.0, max(0.0, tank.level - self.level_offset))
+        factor = 1.0 + (self.level_offset / 100.0)
+        if factor <= 0:
+            return None
+        return min(100.0, max(0.0, tank.level / factor))
 
     def calibrated_inventory(self, tank: MyTankAppTank) -> float | None:
         """Return corrected inventory without affecting consumption deltas."""
         if tank.inventory is None:
             return None
+        factor = 1.0 + (self.level_offset / 100.0)
+        if factor <= 0:
+            return None
+        corrected = tank.inventory / factor
         if tank.tank_size is None or tank.tank_size <= 0:
-            return tank.inventory
-        corrected = tank.inventory - (tank.tank_size * self.level_offset / 100)
+            return max(0.0, corrected)
         return min(tank.tank_size, max(0.0, corrected))
 
     def calibrated_ullage(self, tank: MyTankAppTank) -> float | None:

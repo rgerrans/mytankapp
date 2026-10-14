@@ -35,7 +35,7 @@
         "data": {
           "scan_interval": "Polling interval (minutes)",
           "low_level": "Low-level threshold (%)",
-          "level_offset": "Reported level high by (percentage points)"
+          "level_offset": "Monitor reads high by (%)"
         }
       }
     }
