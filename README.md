@@ -43,7 +43,7 @@ Enter the username and password used at `mytankapp.com`. The password is retaine
 
 The default poll interval is 12 hours. Options allow 1–24 hours, a 1–99% low-level threshold, and a relative tank-level calibration. Enter a positive percentage when MyTankApp reads high. The correction is **actual = reported / (1 + calibration/100)**; for example, a calibration of **10** turns a reported 86% into about 78.2%. Existing installations that still use the former six-hour default are migrated to 12 hours. Because this is a private, undocumented API with no published quota, the default interval is intentionally conservative.
 
-Automatic login attempts use a 12-hour cooldown after transient connection failures. DNS failures, timeouts, rate limits, and 5xx responses do not trigger aggressive relogin attempts. Explicit 401/403 authorization rejection triggers Home Assistant reauthentication. Credentials submitted interactively in setup or reauthentication are still validated immediately.
+Automatic login attempts use a 15-minute cooldown after transient connection failures. DNS failures, timeouts, rate limits, and 5xx responses do not trigger aggressive relogin attempts. Explicit 401/403 authorization rejection triggers Home Assistant reauthentication. Credentials submitted interactively in setup or reauthentication are still validated immediately.
 
 ## Safety and limitations
 
