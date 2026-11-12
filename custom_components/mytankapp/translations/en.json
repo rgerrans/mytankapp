@@ -34,8 +34,7 @@
         "description": "Polling defaults to every 12 hours because MyTankApp does not publish API limits.",
         "data": {
           "scan_interval": "Polling interval (minutes)",
-          "low_level": "Low-level threshold (%)",
-          "level_offset": "Monitor reads high by (%)"
+          "low_level": "Low-level threshold (%)"
         }
       }
     }
