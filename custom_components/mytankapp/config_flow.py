@@ -12,16 +12,12 @@ import voluptuous as vol
 
 from .api import MyTankAppAuthError, MyTankAppClient, MyTankAppConnectionError, MyTankAppError
 from .const import (
-    CONF_LEVEL_OFFSET,
     CONF_LOW_LEVEL,
     CONF_SCAN_INTERVAL,
-    DEFAULT_LEVEL_OFFSET,
     DEFAULT_LOW_LEVEL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    MAX_LEVEL_OFFSET,
     MAX_SCAN_INTERVAL,
-    MIN_LEVEL_OFFSET,
     MIN_SCAN_INTERVAL,
 )
 
@@ -29,7 +25,7 @@ from .const import (
 class MyTankAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a MyTankApp config flow."""
 
-    VERSION = 3
+    VERSION = 4
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -150,15 +146,6 @@ class MyTankAppOptionsFlow(config_entries.OptionsFlow):
                             CONF_LOW_LEVEL, DEFAULT_LOW_LEVEL
                         ),
                     ): vol.All(vol.Coerce(int), vol.Range(min=1, max=99)),
-                    vol.Required(
-                        CONF_LEVEL_OFFSET,
-                        default=self.config_entry.options.get(
-                            CONF_LEVEL_OFFSET, DEFAULT_LEVEL_OFFSET
-                        ),
-                    ): vol.All(
-                        vol.Coerce(float),
-                        vol.Range(min=MIN_LEVEL_OFFSET, max=MAX_LEVEL_OFFSET),
-                    ),
                 }
             ),
         )
