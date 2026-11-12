@@ -56,17 +56,11 @@ class MyTankAppLowLevelBinarySensor(MyTankAppEntity, BinarySensorEntity):
     def is_on(self) -> bool | None:
         """Return true when the tank level is below the threshold."""
         tank = self.tank
-        if tank is None:
+        if tank is None or tank.level is None:
             return None
-        level = self.calibrated_level(tank)
-        if level is None:
-            return None
-        return level < self._threshold
+        return tank.level < self._threshold
 
     @property
-    def extra_state_attributes(self) -> dict[str, float]:
-        """Expose the active threshold and calibration for diagnostics."""
-        return {
-            "threshold": self._threshold,
-            "level_offset": self.level_offset,
-        }
+    def extra_state_attributes(self) -> dict[str, int]:
+        """Expose the active threshold for diagnostics."""
+        return {"threshold": self._threshold}
