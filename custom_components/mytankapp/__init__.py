@@ -32,14 +32,25 @@ MyTankAppConfigEntry: TypeAlias = ConfigEntry[MyTankAppRuntimeData]
 async def async_migrate_entry(
     hass: HomeAssistant, entry: MyTankAppConfigEntry
 ) -> bool:
-    """Migrate existing entries to the current polling default."""
+    """Migrate existing entries to the current options schema."""
+    options = dict(entry.options)
+    changed = False
+
     if entry.version < 3:
-        options = dict(entry.options)
         # Preserve a deliberately customized interval. Older versions either had
         # no stored interval or used the former six-hour default (360 minutes).
         if options.get(CONF_SCAN_INTERVAL, 360) == 360:
             options[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
-        hass.config_entries.async_update_entry(entry, options=options, version=3)
+        changed = True
+
+    # v0.8.2-v0.8.4 exposed a temporary level calibration option. Remove it
+    # entirely now that the upstream reading has been corrected.
+    if "level_offset" in options:
+        options.pop("level_offset")
+        changed = True
+
+    if changed or entry.version < 4:
+        hass.config_entries.async_update_entry(entry, options=options, version=4)
     return True
 
 

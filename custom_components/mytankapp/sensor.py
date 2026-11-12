@@ -247,21 +247,13 @@ class MyTankAppSensor(MyTankAppEntity, SensorEntity):
         tank = self.tank
         if tank is None:
             return None
-        if self.entity_description.key == "level":
-            return self.calibrated_level(tank)
-        if self.entity_description.key == "inventory":
-            return self.calibrated_inventory(tank)
-        if self.entity_description.key == "ullage":
-            return self.calibrated_ullage(tank)
-
         threshold = {
             "days_to_30": 30.0,
             "days_to_15": 15.0,
             "days_to_empty": 0.0,
         }.get(self.entity_description.key)
         if threshold is not None:
-            corrected_level = self.calibrated_level(tank)
-            if corrected_level is None or corrected_level < threshold:
+            if tank.level is None or tank.level < threshold:
                 return None
 
             consumption = self.coordinator.consumption.get(self._device_id)
@@ -271,11 +263,11 @@ class MyTankAppSensor(MyTankAppEntity, SensorEntity):
                 and tank.tank_size is not None
                 and tank.tank_size > 0
             ):
-                corrected_inventory = tank.tank_size * corrected_level / 100
+                current_inventory = tank.tank_size * tank.level / 100
                 target_inventory = tank.tank_size * threshold / 100
                 return int(
                     (
-                        (corrected_inventory - target_inventory)
+                        (current_inventory - target_inventory)
                         / consumption.rolling_usage_per_day
                     )
                     + 0.5
@@ -286,7 +278,7 @@ class MyTankAppSensor(MyTankAppEntity, SensorEntity):
                 and tank.average_daily_usage > 0
             ):
                 return int(
-                    ((corrected_level - threshold) / tank.average_daily_usage)
+                    ((tank.level - threshold) / tank.average_daily_usage)
                     + 0.5
                 )
             return None
