@@ -16,5 +16,6 @@ DEFAULT_LOW_LEVEL: Final = 20
 MIN_SCAN_INTERVAL: Final = 60
 MAX_SCAN_INTERVAL: Final = 1440
 USAGE_WINDOW_DAYS: Final = 7
+HISTORY_REFRESH_INTERVAL_HOURS: Final = 24
 
 BASE_URL: Final = "https://www.mytankapp.com"
