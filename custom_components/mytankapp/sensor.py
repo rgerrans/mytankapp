@@ -175,6 +175,13 @@ LAST_SUCCESSFUL_SYNC_DESCRIPTION = SensorEntityDescription(
     entity_category=EntityCategory.DIAGNOSTIC,
 )
 
+LAST_HISTORY_REFRESH_DESCRIPTION = SensorEntityDescription(
+    key="last_history_refresh",
+    translation_key="last_history_refresh",
+    device_class=SensorDeviceClass.TIMESTAMP,
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -218,6 +225,11 @@ async def async_setup_entry(
         entities.extend(
             MyTankAppLastSuccessfulSyncSensor(entry, device_id)
             for device_id in new_device_ids
+        )
+        entities.extend(
+            MyTankAppLastHistoryRefreshSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
         )
         async_add_entities(entities)
         known_device_ids.update(new_device_ids)
@@ -354,6 +366,23 @@ class MyTankAppLastSuccessfulSyncSensor(MyTankAppEntity, SensorEntity):
     def native_value(self) -> Any:
         """Return the latest successful coordinator refresh time."""
         return self.coordinator.last_successful_sync
+
+
+class MyTankAppLastHistoryRefreshSensor(MyTankAppEntity, SensorEntity):
+    """Timestamp of the latest successful history-endpoint refresh."""
+
+    entity_description = LAST_HISTORY_REFRESH_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+
+    @property
+    def native_value(self) -> Any:
+        """Return the latest successful history refresh time."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None:
+            return None
+        return consumption.history_refreshed_at
 
 
 class MyTankAppPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
