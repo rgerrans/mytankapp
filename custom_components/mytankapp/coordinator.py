@@ -18,7 +18,12 @@ from homeassistant.util import slugify
 from homeassistant.util.unit_conversion import VolumeConverter
 
 from .api import MyTankAppAuthError, MyTankAppClient, MyTankAppError
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    HISTORY_REFRESH_INTERVAL_HOURS,
+)
 from .models import MyTankAppAccount, MyTankAppConsumption, MyTankAppTank
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,6 +82,7 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
             raise UpdateFailed(str(err)) from err
 
         changed = False
+        now = datetime.now(timezone.utc)
         refresh_history_for: list[str] = []
         for device_id, tank in tanks.items():
             if not tank.is_propane:
@@ -84,8 +90,14 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
             consumption = self.consumption.setdefault(
                 device_id, MyTankAppConsumption()
             )
+            history_refresh_due = (
+                consumption.history_refreshed_at is None
+                or now - consumption.history_refreshed_at
+                >= timedelta(hours=HISTORY_REFRESH_INTERVAL_HOURS)
+            )
             if (
-                not consumption.statistics_initialized
+                history_refresh_due
+                or not consumption.statistics_initialized
                 or consumption.flow_rate_per_hour is None
                 or consumption.usage_calculated_at is None
                 or (
@@ -129,6 +141,9 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                     tank_size=tank.tank_size,
                     uses_liters=self.account.uses_liters,
                 )
+                consumption.history_refreshed_at = now
+                changed = True
+
                 if statistics:
                     metadata: StatisticMetaData = {
                         "source": DOMAIN,
@@ -162,5 +177,5 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                     for device_id, consumption in self.consumption.items()
                 }
             )
-        self.last_successful_sync = datetime.now(timezone.utc)
+        self.last_successful_sync = now
         return tanks
