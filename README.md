@@ -56,3 +56,8 @@ Automatic login attempts use a 15-minute cooldown after transient connection fai
 ## Support data
 
 Home Assistant diagnostics redact credentials and tank identifiers. Before sharing logs, still check them for personal information.
+
+
+## Versioning
+
+This integration uses semantic versioning. The Home Assistant manifest uses `MAJOR.MINOR.PATCH` (for example, `0.9.0`), while GitHub tags and releases use the conventional leading `v` (for example, `v0.9.0`).
