@@ -199,6 +199,7 @@ class MyTankAppConsumption:
     statistics_total_liters: float = 0.0
     statistics_last_inventory: float | None = None
     statistics_last_reported: datetime | None = None
+    history_refreshed_at: datetime | None = None
 
     @staticmethod
     def _refill_threshold(tank_size: float | None) -> float:
@@ -460,6 +461,11 @@ class MyTankAppConsumption:
                 if self.statistics_last_reported
                 else None
             ),
+            "history_refreshed_at": (
+                self.history_refreshed_at.isoformat()
+                if self.history_refreshed_at
+                else None
+            ),
         }
 
     @classmethod
@@ -486,4 +492,5 @@ class MyTankAppConsumption:
             statistics_total_liters=_float(data.get("statistics_total_liters")) or 0.0,
             statistics_last_inventory=_float(data.get("statistics_last_inventory")),
             statistics_last_reported=_datetime(data.get("statistics_last_reported")),
+            history_refreshed_at=_datetime(data.get("history_refreshed_at")),
         )
