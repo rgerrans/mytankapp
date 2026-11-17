@@ -13,6 +13,7 @@ Each tank becomes a Home Assistant device with sensors for:
 - Calculated 7-day rolling daily usage from timestamped tank history
 - Last report time
 - Last successful integration sync time
+- Last successful history refresh time (diagnostic)
 - Temperature and base temperature
 - Estimated days to 30%, 15%, and empty
 - Cumulative propane energy consumed in kWh for the Energy Dashboard
@@ -41,7 +42,7 @@ Copy `custom_components/mytankapp` into your Home Assistant `config/custom_compo
 
 Enter the username and password used at `mytankapp.com`. The password is retained by Home Assistant because the website provides no refresh-token flow and the integration must log in again after restarts or expired sessions.
 
-The default poll interval is 12 hours. Options allow 1–24 hours and a 1–99% low-level threshold. Existing installations that still use the former six-hour default are migrated to 12 hours. Because this is a private, undocumented API with no published quota, the default interval is intentionally conservative.
+The default poll interval is 12 hours. Options allow 1–24 hours and a 1–99% low-level threshold. In addition to change-triggered history pulls, the integration forces a successful history refresh at least once every 24 hours; failed history pulls remain due and are retried on the next normal coordinator poll. Existing installations that still use the former six-hour default are migrated to 12 hours. Because this is a private, undocumented API with no published quota, the default interval is intentionally conservative.
 
 Automatic login attempts use a 15-minute cooldown after transient connection failures. DNS failures, timeouts, rate limits, and 5xx responses do not trigger aggressive relogin attempts. Explicit 401/403 authorization rejection triggers Home Assistant reauthentication. Credentials submitted interactively in setup or reauthentication are still validated immediately.
 
