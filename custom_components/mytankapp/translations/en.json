@@ -49,6 +49,7 @@
       "propane_daily_usage": { "name": "Calculated daily usage" },
       "last_reported": { "name": "Last reported" },
       "last_successful_sync": { "name": "Last successful sync" },
+      "last_history_refresh": { "name": "Last history refresh" },
       "temperature": { "name": "Temperature" },
       "base_temperature": { "name": "Base temperature" },
       "days_to_30": { "name": "Days to 30%" },
