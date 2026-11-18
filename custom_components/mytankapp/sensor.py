@@ -26,7 +26,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MyTankAppConfigEntry
 from .entity import MyTankAppEntity
-from .models import MyTankAppAccount, MyTankAppTank
+from .models import LITERS_PER_GALLON, MyTankAppAccount, MyTankAppTank
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -147,8 +147,7 @@ CONSUMPTION_DESCRIPTION = SensorEntityDescription(
 GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
     key="propane_consumed",
     translation_key="propane_consumed",
-    device_class=SensorDeviceClass.GAS,
-    native_unit_of_measurement=UnitOfVolume.LITERS,
+    device_class=SensorDeviceClass.VOLUME,
     state_class=SensorStateClass.TOTAL_INCREASING,
     suggested_display_precision=2,
 )
@@ -156,8 +155,16 @@ GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
 ESTIMATED_GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
     key="estimated_propane_consumed",
     translation_key="estimated_propane_consumed",
-    device_class=SensorDeviceClass.GAS,
-    native_unit_of_measurement=UnitOfVolume.LITERS,
+    device_class=SensorDeviceClass.VOLUME,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    suggested_display_precision=2,
+)
+
+ESTIMATED_ENERGY_DESCRIPTION = SensorEntityDescription(
+    key="estimated_propane_energy_consumed",
+    translation_key="estimated_propane_energy_consumed",
+    device_class=SensorDeviceClass.ENERGY,
+    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
     state_class=SensorStateClass.TOTAL_INCREASING,
     suggested_display_precision=2,
 )
@@ -231,6 +238,11 @@ async def async_setup_entry(
         )
         entities.extend(
             MyTankAppEstimatedGasConsumedSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
+        )
+        entities.extend(
+            MyTankAppEstimatedEnergyConsumedSensor(entry, device_id)
             for device_id in new_device_ids
             if coordinator.data[device_id].is_propane
         )
@@ -365,37 +377,77 @@ class MyTankAppEnergyConsumedSensor(MyTankAppEntity, SensorEntity):
 
 
 class MyTankAppGasConsumedSensor(MyTankAppEntity, SensorEntity):
-    """Cumulative propane volume consumed for the Energy Dashboard gas chart."""
+    """Cumulative liquid propane volume consumed."""
 
     entity_description = GAS_CONSUMPTION_DESCRIPTION
 
     def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
         super().__init__(entry, device_id, self.entity_description.key)
+        self._account = entry.runtime_data.account
 
     @property
     def native_value(self) -> float | None:
-        """Return cumulative consumed propane volume in liters."""
+        """Return cumulative liquid propane volume consumed."""
         consumption = self.coordinator.consumption.get(self._device_id)
         if consumption is None:
             return None
-        return round(consumption.total_liters, 3)
+        value = (
+            consumption.total_liters
+            if self._account.uses_liters
+            else consumption.total_liters / LITERS_PER_GALLON
+        )
+        return round(value, 3)
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the account-aware liquid volume unit."""
+        return (
+            UnitOfVolume.LITERS
+            if self._account.uses_liters
+            else UnitOfVolume.GALLONS
+        )
+
+    @property
+    def suggested_unit_of_measurement(self) -> str:
+        """Prefer the account's liquid volume display unit."""
+        return self.native_unit_of_measurement
 
 
 class MyTankAppEstimatedGasConsumedSensor(MyTankAppEntity, SensorEntity):
-    """Estimated cumulative propane volume with coarse readings interpolated."""
+    """Estimated cumulative liquid propane volume."""
 
     entity_description = ESTIMATED_GAS_CONSUMPTION_DESCRIPTION
 
     def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
         super().__init__(entry, device_id, self.entity_description.key)
+        self._account = entry.runtime_data.account
 
     @property
     def native_value(self) -> float | None:
-        """Return estimated cumulative consumed propane volume in liters."""
+        """Return estimated cumulative liquid propane volume."""
         consumption = self.coordinator.consumption.get(self._device_id)
         if consumption is None or not consumption.estimated_initialized:
             return None
-        return round(consumption.estimated_total_liters, 3)
+        value = (
+            consumption.estimated_total_liters
+            if self._account.uses_liters
+            else consumption.estimated_total_liters / LITERS_PER_GALLON
+        )
+        return round(value, 3)
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the account-aware liquid volume unit."""
+        return (
+            UnitOfVolume.LITERS
+            if self._account.uses_liters
+            else UnitOfVolume.GALLONS
+        )
+
+    @property
+    def suggested_unit_of_measurement(self) -> str:
+        """Prefer the account's liquid volume display unit."""
+        return self.native_unit_of_measurement
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -414,6 +466,23 @@ class MyTankAppEstimatedGasConsumedSensor(MyTankAppEntity, SensorEntity):
                 "L" if self.coordinator.account.uses_liters else "gal"
             ),
         }
+
+
+class MyTankAppEstimatedEnergyConsumedSensor(MyTankAppEntity, SensorEntity):
+    """Estimated cumulative propane energy equivalent."""
+
+    entity_description = ESTIMATED_ENERGY_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return estimated cumulative propane energy in kWh."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None or not consumption.estimated_energy_initialized:
+            return None
+        return round(consumption.estimated_energy_total_kwh, 3)
 
 
 class MyTankAppLastSuccessfulSyncSensor(MyTankAppEntity, SensorEntity):
@@ -473,6 +542,11 @@ class MyTankAppPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
             else UnitOfVolumeFlowRate.GALLONS_PER_HOUR
         )
 
+    @property
+    def suggested_unit_of_measurement(self) -> str:
+        """Prefer the account's liquid flow-rate unit."""
+        return self.native_unit_of_measurement
+
 
 class MyTankAppEstimatedPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
     """Average estimated propane flow over the latest confirmed interval."""
@@ -499,6 +573,11 @@ class MyTankAppEstimatedPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
             if self._account.uses_liters
             else UnitOfVolumeFlowRate.GALLONS_PER_HOUR
         )
+
+    @property
+    def suggested_unit_of_measurement(self) -> str:
+        """Prefer the account's liquid flow-rate unit."""
+        return self.native_unit_of_measurement
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

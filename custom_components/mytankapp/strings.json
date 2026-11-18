@@ -58,6 +58,7 @@
       "propane_energy_consumed": { "name": "Propane energy consumed" },
       "propane_consumed": { "name": "Propane consumed" },
       "estimated_propane_consumed": { "name": "Estimated propane consumed" },
+      "estimated_propane_energy_consumed": { "name": "Estimated propane energy consumed" },
       "propane_flow_rate": { "name": "Propane calculated flow rate" },
       "estimated_propane_flow_rate": { "name": "Estimated propane flow rate" }
     },
