@@ -575,7 +575,6 @@ class MyTankAppEstimatedPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
         )
 
     @property
-    @property
     def suggested_unit_of_measurement(self) -> str:
         """Prefer the account's liquid flow-rate unit."""
         return self.native_unit_of_measurement
