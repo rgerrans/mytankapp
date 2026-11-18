@@ -208,6 +208,10 @@ class MyTankAppConsumption:
     estimated_flow_calculated_at: datetime | None = None
     estimated_flow_interval_start: datetime | None = None
     estimated_flow_interval_hours: float | None = None
+    estimated_energy_initialized: bool = False
+    estimated_energy_total_kwh: float = 0.0
+    estimated_energy_last_inventory: float | None = None
+    estimated_energy_last_reported: datetime | None = None
 
     @staticmethod
     def _refill_threshold(tank_size: float | None) -> float:
@@ -440,6 +444,107 @@ class MyTankAppConsumption:
             # Unchanged or small upward-noise readings extend the interval but
             # do not commit consumption. A later confirmed drop will be spread
             # back to the last stable inventory timestamp.
+
+        return [
+            {"start": start, "sum": round(total, 6)}
+            for start, total in sorted(statistics_by_hour.items())
+        ]
+
+    def build_estimated_energy_statistics(
+        self,
+        readings: list[MyTankAppReading],
+        *,
+        tank_size: float | None,
+        uses_liters: bool,
+    ) -> list[dict[str, Any]]:
+        """Build cumulative estimated propane energy in kWh.
+
+        This uses an independent persisted cursor so the energy series can
+        bootstrap from available history even when the volume estimator was
+        initialized by an earlier integration version.
+        """
+        ordered = self.filter_history_outliers(readings, tank_size=tank_size)
+        if not ordered:
+            return []
+
+        if not self.estimated_energy_initialized:
+            first = ordered[0]
+            self.estimated_energy_initialized = True
+            self.estimated_energy_total_kwh = 0.0
+            self.estimated_energy_last_inventory = first.units
+            self.estimated_energy_last_reported = first.reported_at
+
+        if (
+            self.estimated_energy_last_inventory is None
+            or self.estimated_energy_last_reported is None
+        ):
+            return []
+
+        statistics_by_hour: dict[datetime, float] = {}
+        refill_threshold = self._refill_threshold(tank_size)
+
+        for reading in ordered:
+            if reading.reported_at <= self.estimated_energy_last_reported:
+                continue
+
+            previous_inventory = self.estimated_energy_last_inventory
+            previous_time = self.estimated_energy_last_reported
+            current = reading.units
+            increase = current - previous_inventory
+
+            if increase >= refill_threshold:
+                self.estimated_energy_last_inventory = current
+                self.estimated_energy_last_reported = reading.reported_at
+                start = reading.reported_at.replace(
+                    minute=0, second=0, microsecond=0
+                )
+                statistics_by_hour[start] = self.estimated_energy_total_kwh
+                continue
+
+            if current < previous_inventory:
+                consumed = previous_inventory - current
+                gallons = (
+                    consumed / LITERS_PER_GALLON if uses_liters else consumed
+                )
+                energy_kwh = gallons * PROPANE_KWH_PER_GALLON
+                elapsed_hours = (
+                    reading.reported_at - previous_time
+                ).total_seconds() / 3600
+
+                if elapsed_hours > 0:
+                    start_hour = previous_time.replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    end_hour = reading.reported_at.replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    hour = start_hour
+                    while hour <= end_hour:
+                        elapsed = max(
+                            0.0,
+                            min(
+                                elapsed_hours,
+                                (hour - previous_time).total_seconds() / 3600,
+                            ),
+                        )
+                        fraction = elapsed / elapsed_hours
+                        statistics_by_hour[hour] = (
+                            self.estimated_energy_total_kwh
+                            + energy_kwh * fraction
+                        )
+                        hour += timedelta(hours=1)
+
+                self.estimated_energy_total_kwh += energy_kwh
+                self.estimated_energy_last_inventory = current
+                self.estimated_energy_last_reported = reading.reported_at
+                end = reading.reported_at.replace(
+                    minute=0, second=0, microsecond=0
+                )
+                statistics_by_hour[end] = self.estimated_energy_total_kwh
+                continue
+
+            # Unchanged or small upward-noise readings do not advance the
+            # confirmed baseline. A later drop is spread over the full interval.
 
         return [
             {"start": start, "sum": round(total, 6)}
@@ -726,6 +831,14 @@ class MyTankAppConsumption:
                 else None
             ),
             "estimated_flow_interval_hours": self.estimated_flow_interval_hours,
+            "estimated_energy_initialized": self.estimated_energy_initialized,
+            "estimated_energy_total_kwh": self.estimated_energy_total_kwh,
+            "estimated_energy_last_inventory": self.estimated_energy_last_inventory,
+            "estimated_energy_last_reported": (
+                self.estimated_energy_last_reported.isoformat()
+                if self.estimated_energy_last_reported
+                else None
+            ),
         }
 
     @classmethod
@@ -768,5 +881,17 @@ class MyTankAppConsumption:
             ),
             estimated_flow_interval_hours=_float(
                 data.get("estimated_flow_interval_hours")
+            ),
+            estimated_energy_initialized=bool(
+                data.get("estimated_energy_initialized", False)
+            ),
+            estimated_energy_total_kwh=_float(
+                data.get("estimated_energy_total_kwh")
+            ) or 0.0,
+            estimated_energy_last_inventory=_float(
+                data.get("estimated_energy_last_inventory")
+            ),
+            estimated_energy_last_reported=_datetime(
+                data.get("estimated_energy_last_reported")
             ),
         )
