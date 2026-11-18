@@ -160,15 +160,6 @@ ESTIMATED_GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=2,
 )
 
-ESTIMATED_ENERGY_DESCRIPTION = SensorEntityDescription(
-    key="estimated_propane_energy_consumed",
-    translation_key="estimated_propane_energy_consumed",
-    device_class=SensorDeviceClass.ENERGY,
-    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    suggested_display_precision=2,
-)
-
 FLOW_RATE_DESCRIPTION = SensorEntityDescription(
     key="propane_flow_rate",
     translation_key="propane_flow_rate",
@@ -238,11 +229,6 @@ async def async_setup_entry(
         )
         entities.extend(
             MyTankAppEstimatedGasConsumedSensor(entry, device_id)
-            for device_id in new_device_ids
-            if coordinator.data[device_id].is_propane
-        )
-        entities.extend(
-            MyTankAppEstimatedEnergyConsumedSensor(entry, device_id)
             for device_id in new_device_ids
             if coordinator.data[device_id].is_propane
         )
@@ -466,23 +452,6 @@ class MyTankAppEstimatedGasConsumedSensor(MyTankAppEntity, SensorEntity):
                 "L" if self.coordinator.account.uses_liters else "gal"
             ),
         }
-
-
-class MyTankAppEstimatedEnergyConsumedSensor(MyTankAppEntity, SensorEntity):
-    """Estimated cumulative propane energy equivalent."""
-
-    entity_description = ESTIMATED_ENERGY_DESCRIPTION
-
-    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
-        super().__init__(entry, device_id, self.entity_description.key)
-
-    @property
-    def native_value(self) -> float | None:
-        """Return estimated cumulative propane energy in kWh."""
-        consumption = self.coordinator.consumption.get(self._device_id)
-        if consumption is None or not consumption.estimated_energy_initialized:
-            return None
-        return round(consumption.estimated_energy_total_kwh, 3)
 
 
 class MyTankAppLastSuccessfulSyncSensor(MyTankAppEntity, SensorEntity):
