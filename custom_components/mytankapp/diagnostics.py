@@ -51,6 +51,16 @@ async def async_get_config_entry_diagnostics(
         except MyTankAppError as err:
             item["error"] = type(err).__name__
         else:
+            filtered = runtime.coordinator.consumption.get(tank.device_id)
+            filtered_readings = (
+                filtered.filter_history_outliers(
+                    readings, tank_size=tank.tank_size
+                )
+                if filtered is not None
+                else readings
+            )
+            item["raw_reading_count"] = len(readings)
+            item["filtered_reading_count"] = len(filtered_readings)
             item["readings"] = [
                 {
                     "reported_at": reading.reported_at.isoformat(),
