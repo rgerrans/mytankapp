@@ -124,22 +124,32 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                     err,
                 )
             else:
+                filtered_readings = consumption.filter_history_outliers(
+                    readings, tank_size=tank.tank_size
+                )
                 changed |= consumption.update_from_readings(
-                    readings,
+                    filtered_readings,
                     tank_size=tank.tank_size,
                     uses_liters=self.account.uses_liters,
                 )
                 changed |= consumption.update_flow_rate(
-                    readings, tank_size=tank.tank_size
+                    filtered_readings, tank_size=tank.tank_size
                 )
                 changed |= consumption.update_rolling_usage(
-                    readings, tank_size=tank.tank_size
+                    filtered_readings, tank_size=tank.tank_size
                 )
 
                 statistics = consumption.build_external_statistics(
-                    readings,
+                    filtered_readings,
                     tank_size=tank.tank_size,
                     uses_liters=self.account.uses_liters,
+                )
+                estimated_statistics = (
+                    consumption.build_estimated_external_statistics(
+                        readings,
+                        tank_size=tank.tank_size,
+                        uses_liters=self.account.uses_liters,
+                    )
                 )
                 consumption.history_refreshed_at = now
                 changed = True
@@ -158,6 +168,28 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                     }
                     async_add_external_statistics(
                         self.hass, metadata, statistics
+                    )
+                    changed = True
+
+                if estimated_statistics:
+                    estimated_metadata: StatisticMetaData = {
+                        "source": DOMAIN,
+                        "name": (
+                            f"{tank.display_name} estimated propane consumption"
+                        ),
+                        "statistic_id": (
+                            f"{DOMAIN}:{slugify(device_id)}"
+                            "_estimated_propane_consumption"
+                        ),
+                        "unit_class": VolumeConverter.UNIT_CLASS,
+                        "unit_of_measurement": UnitOfVolume.LITERS,
+                        "mean_type": StatisticMeanType.NONE,
+                        "has_sum": True,
+                    }
+                    async_add_external_statistics(
+                        self.hass,
+                        estimated_metadata,
+                        estimated_statistics,
                     )
                     changed = True
 
