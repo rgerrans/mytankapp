@@ -55,7 +55,7 @@ Automatic login attempts use a 15-minute cooldown after transient connection fai
 
 ## Support data
 
-Home Assistant diagnostics redact credentials and tank identifiers. Before sharing logs, still check them for personal information.
+Home Assistant diagnostics redact credentials and tank identifiers. Diagnostics also include up to 30 recent propane history readings per tank with only timestamp, Units, and Percent values so reporting resolution can be inspected without exposing vendor identifiers. If the history endpoint fails, diagnostics record the error type rather than failing the download. Before sharing logs, still check them for personal information.
 
 
 ## Versioning

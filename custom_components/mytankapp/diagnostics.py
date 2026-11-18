@@ -8,6 +8,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import MyTankAppConfigEntry
+from .api import MyTankAppError
 
 TO_REDACT = {
     "password",
@@ -40,6 +41,26 @@ async def async_get_config_entry_diagnostics(
         }
         for tank in runtime.coordinator.data.values()
     ]
+    history: list[dict[str, Any]] = []
+    for index, tank in enumerate(runtime.coordinator.data.values(), start=1):
+        if not tank.is_propane:
+            continue
+        item: dict[str, Any] = {"tank": f"tank_{index}"}
+        try:
+            readings = await runtime.client.async_get_recent_readings(tank.device_id)
+        except MyTankAppError as err:
+            item["error"] = type(err).__name__
+        else:
+            item["readings"] = [
+                {
+                    "reported_at": reading.reported_at.isoformat(),
+                    "units": reading.units,
+                    "percent": reading.percent,
+                }
+                for reading in readings[:30]
+            ]
+        history.append(item)
+
     return async_redact_data(
         {
             "entry": {"data": dict(entry.data), "options": dict(entry.options)},
@@ -49,6 +70,7 @@ async def async_get_config_entry_diagnostics(
                 "data_source": runtime.account.data_source,
             },
             "tanks": tanks,
+            "recent_history": history,
         },
         TO_REDACT,
     )
