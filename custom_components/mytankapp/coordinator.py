@@ -9,13 +9,13 @@ from typing import Any
 from homeassistant.components.recorder.models import StatisticMeanType, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_add_external_statistics
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfVolume
+from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
-from homeassistant.util.unit_conversion import EnergyConverter, VolumeConverter
+from homeassistant.util.unit_conversion import VolumeConverter
 
 from .api import MyTankAppAuthError, MyTankAppClient, MyTankAppError
 from .const import (
@@ -99,7 +99,6 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                 history_refresh_due
                 or not consumption.statistics_initialized
                 or not consumption.estimated_initialized
-                or not consumption.estimated_energy_initialized
                 or consumption.flow_rate_per_hour is None
                 or consumption.usage_calculated_at is None
                 or (
@@ -153,13 +152,6 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                         uses_liters=self.account.uses_liters,
                     )
                 )
-                estimated_energy_statistics = (
-                    consumption.build_estimated_energy_statistics(
-                        readings,
-                        tank_size=tank.tank_size,
-                        uses_liters=self.account.uses_liters,
-                    )
-                )
                 consumption.history_refreshed_at = now
                 changed = True
 
@@ -202,27 +194,6 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
                     )
                     changed = True
 
-                if estimated_energy_statistics:
-                    estimated_energy_metadata: StatisticMetaData = {
-                        "source": DOMAIN,
-                        "name": (
-                            f"{tank.display_name} estimated propane energy"
-                        ),
-                        "statistic_id": (
-                            f"{DOMAIN}:{slugify(device_id)}"
-                            "_estimated_propane_energy"
-                        ),
-                        "unit_class": EnergyConverter.UNIT_CLASS,
-                        "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
-                        "mean_type": StatisticMeanType.NONE,
-                        "has_sum": True,
-                    }
-                    async_add_external_statistics(
-                        self.hass,
-                        estimated_energy_metadata,
-                        estimated_energy_statistics,
-                    )
-                    changed = True
 
         # Apply the current device-list inventory after history as a fallback
         # when the transaction endpoint is unavailable or lags behind.
