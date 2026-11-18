@@ -8,6 +8,9 @@ from typing import TypeAlias
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.components.recorder import get_instance
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import slugify
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -72,6 +75,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: MyTankAppConfigEntry) ->
     await coordinator.async_load_consumption()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = MyTankAppRuntimeData(client, account, coordinator)
+
+    # v0.13.0 briefly exposed a kWh-based estimated propane energy entity and
+    # external statistic. Remove those obsolete artifacts so the Energy
+    # dashboard can return to the volume-based estimated propane statistic.
+    entity_registry = er.async_get(hass)
+    obsolete_statistics: list[str] = []
+    for device_id in coordinator.data:
+        unique_id = f"{device_id}_estimated_propane_energy_consumed"
+        if entity_id := entity_registry.async_get_entity_id(
+            "sensor", "mytankapp", unique_id
+        ):
+            entity_registry.async_remove(entity_id)
+        obsolete_statistics.append(
+            f"mytankapp:{slugify(device_id)}_estimated_propane_energy"
+        )
+    if obsolete_statistics:
+        get_instance(hass).async_clear_statistics(obsolete_statistics)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
