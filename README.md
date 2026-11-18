@@ -21,6 +21,7 @@ Each tank becomes a Home Assistant device with sensors for:
 - Estimated cumulative propane consumption with coarse readings interpolated over time
 - Raw timestamped propane-consumption statistics imported from MyTankApp history
 - Estimated timestamped propane-consumption statistics for smoother Energy Dashboard daily allocation
+- Estimated propane flow rate averaged across the latest confirmed consumption interval
 - Configurable low-level problem state
 
 Days-to-threshold estimates prefer the calculated rolling usage rate when history is available, and fall back to MyTankApp's reported average when it is not. The calculated rate ignores deliveries and small upward gauge noise.
@@ -28,6 +29,8 @@ Days-to-threshold estimates prefer the calculated rolling usage rate when histor
 The integration keeps the raw observed consumption series for transparency. Because MyTankApp can expose tank history only in coarse whole-percent steps, version 0.11.0 also creates an **estimated propane consumption** series. Each confirmed inventory decrease is spread linearly across the elapsed interval since the prior stable level, preserving the observed total while producing more realistic daily allocation. A conservative outlier filter removes isolated large excursions that immediately rebound toward the prior level, such as a transient bad sensor reading.
 
 For the smoother daily gas chart, select **<tank name> estimated propane consumption** under **Settings → Dashboards → Energy → Gas consumption**. The raw **<tank name> propane consumption** statistic remains available for comparison.
+
+For dashboards, prefer **Estimated propane flow rate** over the raw calculated flow-rate sensor. It represents the average rate across the latest confirmed inventory-change interval; it is not an instantaneous burner-flow measurement.
 
 ## Installation
 
