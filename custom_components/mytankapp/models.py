@@ -200,11 +200,157 @@ class MyTankAppConsumption:
     statistics_last_inventory: float | None = None
     statistics_last_reported: datetime | None = None
     history_refreshed_at: datetime | None = None
+    estimated_initialized: bool = False
+    estimated_total_liters: float = 0.0
+    estimated_last_inventory: float | None = None
+    estimated_last_reported: datetime | None = None
 
     @staticmethod
     def _refill_threshold(tank_size: float | None) -> float:
         """Return the volume increase treated as a delivery rather than noise."""
         return max(2.0, (tank_size or 0) * 0.02)
+
+    @classmethod
+    def filter_history_outliers(
+        cls,
+        readings: list[MyTankAppReading],
+        *,
+        tank_size: float | None,
+    ) -> list[MyTankAppReading]:
+        """Remove isolated large excursions that immediately rebound.
+
+        This is intentionally conservative: only a middle point that moves by
+        at least the refill threshold and then rebounds toward the prior level
+        is removed. Genuine sustained changes and deliveries remain intact.
+        """
+        ordered = sorted(readings, key=lambda reading: reading.reported_at)
+        if len(ordered) < 3:
+            return ordered
+
+        threshold = cls._refill_threshold(tank_size)
+        filtered: list[MyTankAppReading] = []
+        for index, reading in enumerate(ordered):
+            if index == 0 or index == len(ordered) - 1:
+                filtered.append(reading)
+                continue
+
+            previous = ordered[index - 1]
+            following = ordered[index + 1]
+            excursion = abs(reading.units - previous.units)
+            rebound = abs(following.units - reading.units)
+            neighbor_gap = abs(following.units - previous.units)
+
+            if (
+                excursion >= threshold
+                and rebound >= threshold
+                and neighbor_gap <= threshold
+            ):
+                continue
+            filtered.append(reading)
+        return filtered
+
+    def build_estimated_external_statistics(
+        self,
+        readings: list[MyTankAppReading],
+        *,
+        tank_size: float | None,
+        uses_liters: bool,
+    ) -> list[dict[str, Any]]:
+        """Build cumulative estimated usage by interpolating confirmed drops.
+
+        Each confirmed inventory decrease is spread linearly from the previous
+        stable reading to the new reading. This preserves the measured total
+        while avoiding false 10-gallon single-day spikes caused by 1% source
+        resolution. Existing hourly rows can be re-imported and updated.
+        """
+        ordered = self.filter_history_outliers(readings, tank_size=tank_size)
+        if not ordered:
+            return []
+
+        if not self.estimated_initialized:
+            first = ordered[0]
+            self.estimated_initialized = True
+            self.estimated_total_liters = 0.0
+            self.estimated_last_inventory = first.units
+            self.estimated_last_reported = first.reported_at
+
+        if (
+            self.estimated_last_inventory is None
+            or self.estimated_last_reported is None
+        ):
+            return []
+
+        statistics_by_hour: dict[datetime, float] = {}
+        refill_threshold = self._refill_threshold(tank_size)
+
+        for reading in ordered:
+            if reading.reported_at <= self.estimated_last_reported:
+                continue
+
+            previous_inventory = self.estimated_last_inventory
+            previous_time = self.estimated_last_reported
+            current = reading.units
+            increase = current - previous_inventory
+
+            if increase >= refill_threshold:
+                self.estimated_last_inventory = current
+                self.estimated_last_reported = reading.reported_at
+                start = reading.reported_at.replace(
+                    minute=0, second=0, microsecond=0
+                )
+                statistics_by_hour[start] = self.estimated_total_liters
+                continue
+
+            if current < previous_inventory:
+                consumed = previous_inventory - current
+                liters = (
+                    consumed
+                    if uses_liters
+                    else consumed * LITERS_PER_GALLON
+                )
+                elapsed_hours = (
+                    reading.reported_at - previous_time
+                ).total_seconds() / 3600
+
+                if elapsed_hours > 0:
+                    start_hour = previous_time.replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    end_hour = reading.reported_at.replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    hour = start_hour
+                    while hour <= end_hour:
+                        elapsed = max(
+                            0.0,
+                            min(
+                                elapsed_hours,
+                                (hour - previous_time).total_seconds() / 3600,
+                            ),
+                        )
+                        fraction = elapsed / elapsed_hours
+                        statistics_by_hour[hour] = (
+                            self.estimated_total_liters + liters * fraction
+                        )
+                        hour += timedelta(hours=1)
+
+                self.estimated_total_liters += liters
+                self.estimated_last_inventory = current
+                self.estimated_last_reported = reading.reported_at
+                end = reading.reported_at.replace(
+                    minute=0, second=0, microsecond=0
+                )
+                statistics_by_hour[end] = self.estimated_total_liters
+                continue
+
+            # Unchanged or small upward-noise readings extend the interval but
+            # do not commit consumption. A later confirmed drop will be spread
+            # back to the last stable inventory timestamp.
+
+        return [
+            {"start": start, "sum": round(total, 6)}
+            for start, total in sorted(statistics_by_hour.items())
+        ]
 
     def update(self, tank: MyTankAppTank, *, uses_liters: bool) -> bool:
         """Apply a new tank reading and return whether stored data changed."""
@@ -466,6 +612,14 @@ class MyTankAppConsumption:
                 if self.history_refreshed_at
                 else None
             ),
+            "estimated_initialized": self.estimated_initialized,
+            "estimated_total_liters": self.estimated_total_liters,
+            "estimated_last_inventory": self.estimated_last_inventory,
+            "estimated_last_reported": (
+                self.estimated_last_reported.isoformat()
+                if self.estimated_last_reported
+                else None
+            ),
         }
 
     @classmethod
@@ -493,4 +647,8 @@ class MyTankAppConsumption:
             statistics_last_inventory=_float(data.get("statistics_last_inventory")),
             statistics_last_reported=_datetime(data.get("statistics_last_reported")),
             history_refreshed_at=_datetime(data.get("history_refreshed_at")),
+            estimated_initialized=bool(data.get("estimated_initialized", False)),
+            estimated_total_liters=_float(data.get("estimated_total_liters")) or 0.0,
+            estimated_last_inventory=_float(data.get("estimated_last_inventory")),
+            estimated_last_reported=_datetime(data.get("estimated_last_reported")),
         )

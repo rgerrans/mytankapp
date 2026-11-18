@@ -17,13 +17,17 @@ Each tank becomes a Home Assistant device with sensors for:
 - Temperature and base temperature
 - Estimated days to 30%, 15%, and empty
 - Cumulative propane energy consumed in kWh for the Energy Dashboard
-- Cumulative propane volume consumed in liters for the Energy Dashboard gas chart
-- Timestamped propane-consumption statistics imported from MyTankApp history for accurate Energy Dashboard day placement
+- Cumulative propane volume consumed in liters from observed tank changes
+- Estimated cumulative propane consumption with coarse readings interpolated over time
+- Raw timestamped propane-consumption statistics imported from MyTankApp history
+- Estimated timestamped propane-consumption statistics for smoother Energy Dashboard daily allocation
 - Configurable low-level problem state
 
 Days-to-threshold estimates prefer the calculated rolling usage rate when history is available, and fall back to MyTankApp's reported average when it is not. The calculated rate ignores deliveries and small upward gauge noise.
 
-The cumulative consumption sensors count decreases in reported inventory, ignore deliveries, filter small upward gauge fluctuations, and persist across Home Assistant restarts. Version 0.8.1 also imports MyTankApp's recent timestamped history as a Home Assistant external statistic so the Energy dashboard can place usage on the dates it actually occurred. For the most accurate historical gas chart, select the statistic named **<tank name> propane consumption** under **Settings → Dashboards → Energy → Gas consumption**. The older **Propane consumed** sensor remains available for compatibility.
+The integration keeps the raw observed consumption series for transparency. Because MyTankApp can expose tank history only in coarse whole-percent steps, version 0.11.0 also creates an **estimated propane consumption** series. Each confirmed inventory decrease is spread linearly across the elapsed interval since the prior stable level, preserving the observed total while producing more realistic daily allocation. A conservative outlier filter removes isolated large excursions that immediately rebound toward the prior level, such as a transient bad sensor reading.
+
+For the smoother daily gas chart, select **<tank name> estimated propane consumption** under **Settings → Dashboards → Energy → Gas consumption**. The raw **<tank name> propane consumption** statistic remains available for comparison.
 
 ## Installation
 
