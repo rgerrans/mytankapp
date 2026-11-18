@@ -153,6 +153,15 @@ GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=2,
 )
 
+ESTIMATED_GAS_CONSUMPTION_DESCRIPTION = SensorEntityDescription(
+    key="estimated_propane_consumed",
+    translation_key="estimated_propane_consumed",
+    device_class=SensorDeviceClass.GAS,
+    native_unit_of_measurement=UnitOfVolume.LITERS,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    suggested_display_precision=2,
+)
+
 FLOW_RATE_DESCRIPTION = SensorEntityDescription(
     key="propane_flow_rate",
     translation_key="propane_flow_rate",
@@ -209,6 +218,11 @@ async def async_setup_entry(
         )
         entities.extend(
             MyTankAppGasConsumedSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
+        )
+        entities.extend(
+            MyTankAppEstimatedGasConsumedSensor(entry, device_id)
             for device_id in new_device_ids
             if coordinator.data[device_id].is_propane
         )
@@ -352,6 +366,23 @@ class MyTankAppGasConsumedSensor(MyTankAppEntity, SensorEntity):
         if consumption is None:
             return None
         return round(consumption.total_liters, 3)
+
+
+class MyTankAppEstimatedGasConsumedSensor(MyTankAppEntity, SensorEntity):
+    """Estimated cumulative propane volume with coarse readings interpolated."""
+
+    entity_description = ESTIMATED_GAS_CONSUMPTION_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return estimated cumulative consumed propane volume in liters."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None or not consumption.estimated_initialized:
+            return None
+        return round(consumption.estimated_total_liters, 3)
 
 
 class MyTankAppLastSuccessfulSyncSensor(MyTankAppEntity, SensorEntity):
