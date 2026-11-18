@@ -384,6 +384,24 @@ class MyTankAppEstimatedGasConsumedSensor(MyTankAppEntity, SensorEntity):
             return None
         return round(consumption.estimated_total_liters, 3)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Describe the estimation method and source resolution."""
+        tank = self.tank
+        if tank is None:
+            return {}
+        return {
+            "method": "linear_interpolation_between_confirmed_level_changes",
+            "source_resolution": (
+                tank.tank_size / 100
+                if tank.tank_size is not None and tank.tank_size > 0
+                else None
+            ),
+            "source_resolution_unit": (
+                "L" if self.coordinator.account.uses_liters else "gal"
+            ),
+        }
+
 
 class MyTankAppLastSuccessfulSyncSensor(MyTankAppEntity, SensorEntity):
     """Timestamp of the latest successful tank-data refresh."""
