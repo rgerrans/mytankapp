@@ -48,7 +48,7 @@ SENSORS: tuple[MyTankAppSensorDescription, ...] = (
     MyTankAppSensorDescription(
         key="inventory",
         translation_key="inventory",
-        device_class=SensorDeviceClass.VOLUME,
+        device_class=SensorDeviceClass.VOLUME_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda tank, account: tank.inventory,
@@ -56,7 +56,7 @@ SENSORS: tuple[MyTankAppSensorDescription, ...] = (
     MyTankAppSensorDescription(
         key="ullage",
         translation_key="ullage",
-        device_class=SensorDeviceClass.VOLUME,
+        device_class=SensorDeviceClass.VOLUME_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda tank, account: tank.ullage,
@@ -64,7 +64,7 @@ SENSORS: tuple[MyTankAppSensorDescription, ...] = (
     MyTankAppSensorDescription(
         key="capacity",
         translation_key="capacity",
-        device_class=SensorDeviceClass.VOLUME,
+        device_class=SensorDeviceClass.VOLUME_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=0,
