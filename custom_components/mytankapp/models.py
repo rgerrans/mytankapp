@@ -204,6 +204,10 @@ class MyTankAppConsumption:
     estimated_total_liters: float = 0.0
     estimated_last_inventory: float | None = None
     estimated_last_reported: datetime | None = None
+    estimated_flow_rate_per_hour: float | None = None
+    estimated_flow_calculated_at: datetime | None = None
+    estimated_flow_interval_start: datetime | None = None
+    estimated_flow_interval_hours: float | None = None
 
     @staticmethod
     def _refill_threshold(tank_size: float | None) -> float:
@@ -293,6 +297,12 @@ class MyTankAppConsumption:
             increase = current - previous_inventory
 
             if increase >= refill_threshold:
+                self.estimated_flow_rate_per_hour = 0.0
+                self.estimated_flow_interval_start = previous_time
+                self.estimated_flow_interval_hours = (
+                    reading.reported_at - previous_time
+                ).total_seconds() / 3600
+                self.estimated_flow_calculated_at = reading.reported_at
                 self.estimated_last_inventory = current
                 self.estimated_last_reported = reading.reported_at
                 start = reading.reported_at.replace(
@@ -313,6 +323,10 @@ class MyTankAppConsumption:
                 ).total_seconds() / 3600
 
                 if elapsed_hours > 0:
+                    self.estimated_flow_rate_per_hour = consumed / elapsed_hours
+                    self.estimated_flow_interval_start = previous_time
+                    self.estimated_flow_interval_hours = elapsed_hours
+                    self.estimated_flow_calculated_at = reading.reported_at
                     start_hour = previous_time.replace(
                         minute=0, second=0, microsecond=0
                     )
@@ -620,6 +634,18 @@ class MyTankAppConsumption:
                 if self.estimated_last_reported
                 else None
             ),
+            "estimated_flow_rate_per_hour": self.estimated_flow_rate_per_hour,
+            "estimated_flow_calculated_at": (
+                self.estimated_flow_calculated_at.isoformat()
+                if self.estimated_flow_calculated_at
+                else None
+            ),
+            "estimated_flow_interval_start": (
+                self.estimated_flow_interval_start.isoformat()
+                if self.estimated_flow_interval_start
+                else None
+            ),
+            "estimated_flow_interval_hours": self.estimated_flow_interval_hours,
         }
 
     @classmethod
@@ -651,4 +677,16 @@ class MyTankAppConsumption:
             estimated_total_liters=_float(data.get("estimated_total_liters")) or 0.0,
             estimated_last_inventory=_float(data.get("estimated_last_inventory")),
             estimated_last_reported=_datetime(data.get("estimated_last_reported")),
+            estimated_flow_rate_per_hour=_float(
+                data.get("estimated_flow_rate_per_hour")
+            ),
+            estimated_flow_calculated_at=_datetime(
+                data.get("estimated_flow_calculated_at")
+            ),
+            estimated_flow_interval_start=_datetime(
+                data.get("estimated_flow_interval_start")
+            ),
+            estimated_flow_interval_hours=_float(
+                data.get("estimated_flow_interval_hours")
+            ),
         )

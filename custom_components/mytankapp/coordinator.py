@@ -98,6 +98,7 @@ class MyTankAppCoordinator(DataUpdateCoordinator[dict[str, MyTankAppTank]]):
             if (
                 history_refresh_due
                 or not consumption.statistics_initialized
+                or not consumption.estimated_initialized
                 or consumption.flow_rate_per_hour is None
                 or consumption.usage_calculated_at is None
                 or (
