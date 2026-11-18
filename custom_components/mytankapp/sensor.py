@@ -170,6 +170,14 @@ FLOW_RATE_DESCRIPTION = SensorEntityDescription(
     suggested_display_precision=2,
 )
 
+ESTIMATED_FLOW_RATE_DESCRIPTION = SensorEntityDescription(
+    key="estimated_propane_flow_rate",
+    translation_key="estimated_propane_flow_rate",
+    device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=3,
+)
+
 DAILY_USAGE_DESCRIPTION = SensorEntityDescription(
     key="propane_daily_usage",
     translation_key="propane_daily_usage",
@@ -228,6 +236,11 @@ async def async_setup_entry(
         )
         entities.extend(
             MyTankAppPropaneFlowRateSensor(entry, device_id)
+            for device_id in new_device_ids
+            if coordinator.data[device_id].is_propane
+        )
+        entities.extend(
+            MyTankAppEstimatedPropaneFlowRateSensor(entry, device_id)
             for device_id in new_device_ids
             if coordinator.data[device_id].is_propane
         )
@@ -459,6 +472,58 @@ class MyTankAppPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
             if self._account.uses_liters
             else UnitOfVolumeFlowRate.GALLONS_PER_HOUR
         )
+
+
+class MyTankAppEstimatedPropaneFlowRateSensor(MyTankAppEntity, SensorEntity):
+    """Average estimated propane flow over the latest confirmed interval."""
+
+    entity_description = ESTIMATED_FLOW_RATE_DESCRIPTION
+
+    def __init__(self, entry: MyTankAppConfigEntry, device_id: str) -> None:
+        super().__init__(entry, device_id, self.entity_description.key)
+        self._account = entry.runtime_data.account
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the estimated average volume used per hour."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None or consumption.estimated_flow_rate_per_hour is None:
+            return None
+        return round(consumption.estimated_flow_rate_per_hour, 4)
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the account-aware flow-rate unit."""
+        return (
+            UnitOfVolumeFlowRate.LITERS_PER_HOUR
+            if self._account.uses_liters
+            else UnitOfVolumeFlowRate.GALLONS_PER_HOUR
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the confirmed interval used for the estimate."""
+        consumption = self.coordinator.consumption.get(self._device_id)
+        if consumption is None:
+            return {}
+        return {
+            "method": "average_between_confirmed_level_changes",
+            "interval_start": (
+                consumption.estimated_flow_interval_start.isoformat()
+                if consumption.estimated_flow_interval_start
+                else None
+            ),
+            "interval_end": (
+                consumption.estimated_flow_calculated_at.isoformat()
+                if consumption.estimated_flow_calculated_at
+                else None
+            ),
+            "interval_hours": (
+                round(consumption.estimated_flow_interval_hours, 2)
+                if consumption.estimated_flow_interval_hours is not None
+                else None
+            ),
+        }
 
 
 class MyTankAppCalculatedDailyUsageSensor(MyTankAppEntity, SensorEntity):
